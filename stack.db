@@ -1,0 +1,79 @@
+-- Core company/tenant
+CREATE TABLE companies (
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(255) NOT NULL,
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Warehouses belong to a company
+CREATE TABLE warehouses (
+    id          SERIAL PRIMARY KEY,
+    company_id  INT NOT NULL REFERENCES companies(id),
+    name        VARCHAR(255) NOT NULL,
+    location    VARCHAR(255),
+    created_at  TIMESTAMP DEFAULT NOW()
+);
+
+-- Products are platform-wide; SKU is unique
+CREATE TABLE products (
+    id           SERIAL PRIMARY KEY,
+    company_id   INT NOT NULL REFERENCES companies(id),
+    name         VARCHAR(255) NOT NULL,
+    sku          VARCHAR(100) NOT NULL UNIQUE,
+    price        NUMERIC(10, 2) NOT NULL,
+    product_type VARCHAR(50),        -- e.g. 'standard', 'bundle'
+    low_stock_threshold INT DEFAULT 10,
+    created_at   TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE inventory (
+    id           SERIAL PRIMARY KEY,
+    product_id   INT NOT NULL REFERENCES products(id),
+    warehouse_id INT NOT NULL REFERENCES warehouses(id),
+    quantity     INT NOT NULL DEFAULT 0,
+    updated_at   TIMESTAMP DEFAULT NOW(),
+    UNIQUE(product_id, warehouse_id)
+);
+
+-- Audit log
+CREATE TABLE inventory_logs (
+    id           SERIAL PRIMARY KEY,
+    product_id   INT NOT NULL REFERENCES products(id),
+    warehouse_id INT NOT NULL REFERENCES warehouses(id),
+    change_qty   INT NOT NULL,        -- positive = restock, negative = sale
+    reason       VARCHAR(50),         -- 'sale', 'restock', 'adjustment'
+    created_at   TIMESTAMP DEFAULT NOW()
+);
+
+-- Suppliers
+CREATE TABLE suppliers (
+    id            SERIAL PRIMARY KEY,
+    name          VARCHAR(255) NOT NULL,
+    contact_email VARCHAR(255),
+    phone         VARCHAR(50),
+    created_at    TIMESTAMP DEFAULT NOW()
+);
+
+-- Which supplier provides which product
+CREATE TABLE product_suppliers (
+    id          SERIAL PRIMARY KEY,
+    product_id  INT NOT NULL REFERENCES products(id),
+    supplier_id INT NOT NULL REFERENCES suppliers(id),
+    unit_cost   NUMERIC(10, 2),
+    lead_days   INT,                  -- average restock lead time
+    is_primary  BOOLEAN DEFAULT FALSE,
+    UNIQUE(product_id, supplier_id)
+);
+
+CREATE TABLE bundle_items (
+    id              SERIAL PRIMARY KEY,
+    bundle_id       INT NOT NULL REFERENCES products(id),
+    component_id    INT NOT NULL REFERENCES products(id),
+    quantity        INT NOT NULL DEFAULT 1,
+    UNIQUE(bundle_id, component_id)
+);
+
+CREATE INDEX idx_inventory_product    ON inventory(product_id);
+CREATE INDEX idx_inventory_warehouse  ON inventory(warehouse_id);
+CREATE INDEX idx_inventory_logs_time  ON inventory_logs(created_at);
+CREATE INDEX idx_products_company     ON products(company_id);
